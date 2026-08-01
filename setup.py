@@ -178,6 +178,12 @@ else:
 if "darwin" in platform:
     CC_FLAGS += ["-stdlib=libc++", "-std=c++17"]
 
+# CUDA 12.6+'s bundled cub/thrust ships its own nvtx3.hpp, which collides
+# (ambiguous "nvtx3::domain" etc.) with the older vendored copy at
+# src/3rdparty/cudf/detail/nvtx/nvtx3.hpp when both land in the same
+# translation unit. NVTX_DISABLE makes cub skip its own copy entirely.
+CC_FLAGS += ["-DNVTX_DISABLE"]
+NVCC_FLAGS += ["-DNVTX_DISABLE"]
 NVCC_FLAGS += ["--expt-relaxed-constexpr", "--expt-extended-lambda"]
 FAST_MATH, argv = _argparse("--fast_math", argv)
 if FAST_MATH:

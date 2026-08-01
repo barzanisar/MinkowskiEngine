@@ -136,9 +136,23 @@ public:
       LOG_DEBUG("Reserve map of",
                 compute_hash_table_size(size, m_hashtable_occupancy),
                 "for concurrent_unordered_map of size", size);
-      m_map = map_type::create(
-          compute_hash_table_size(size, m_hashtable_occupancy),
-          m_unused_element, m_unused_key, m_hasher, m_equal, m_map_allocator);
+      {
+        // map_type::create() returns a unique_ptr; converting it to the
+        // shared_ptr m_map via implicit conversion instantiates
+        // std::__shared_ptr's unique_ptr&& constructor, which calls
+        // std::__to_address() on the pointee. ADL on map_type (which embeds
+        // thrust::pair in its Allocator template argument) also pulls in
+        // CUDA 12.4+ libcu++'s cuda::std::__to_address, making that call
+        // ambiguous. Constructing via the raw-pointer+deleter overload
+        // avoids the __to_address call entirely.
+        auto __map_uptr = map_type::create(
+            compute_hash_table_size(size, m_hashtable_occupancy),
+            m_unused_element, m_unused_key, m_hasher, m_equal,
+            m_map_allocator);
+        auto __map_deleter = __map_uptr.get_deleter();
+        m_map = std::shared_ptr<map_type>(__map_uptr.release(),
+                                          __map_deleter);
+      }
       LOG_DEBUG("Done concurrent_unordered_map creation");
       CUDA_TRY(cudaStreamSynchronize(0));
       m_capacity = size;
